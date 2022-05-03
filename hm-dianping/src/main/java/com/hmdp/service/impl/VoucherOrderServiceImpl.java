@@ -8,7 +8,9 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWork;
+import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private ISeckillVoucherService seckillVoucherService;
     @Resource
     private RedisIdWork redisIdWork;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
     /**
      * 实现秒杀下单优惠卷
@@ -59,6 +63,50 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private Result createVoucherOrder(Long voucherId){
         //一人一单
         Long userId=UserHolder.getUser().getId();
+        //创建锁对象
+        SimpleRedisLock redisLock=new SimpleRedisLock(stringRedisTemplate, "order:"+userId+":"+voucherId);
+        //尝试获取锁
+        boolean isLock = redisLock.tryLock(1200);
+        //判断是否获取锁成功
+        if (!isLock){
+            //获取锁失败，则返回错误信息
+            return Result.fail("禁止重复下单!");
+        }
+        try {
+            int count = this.query().eq("user_id", userId).eq("voucher_id", voucherId).count();
+            if (count > 0){
+                return Result.fail("改用户已经购买过");
+            }
+            //5.扣减库存
+            boolean flag = seckillVoucherService.update()
+                    .setSql("stock=stock-1").eq("voucher_id", voucherId).gt("stock",0)
+                    .update();
+            if (!flag){
+                return Result.fail("优惠卷库存不足");
+            }
+            //6.生成订单
+            VoucherOrder voucherOrder=new VoucherOrder();
+            //6.1订单Id
+            long orderId = redisIdWork.nextId("order");
+            voucherOrder.setId(orderId);
+            //6.2用户id
+            voucherOrder.setUserId(userId);
+            //6.3代金卷id
+            voucherOrder.setVoucherId(voucherId);
+            this.save(voucherOrder);
+            return Result.ok(orderId);
+        } finally {
+            redisLock.unlock();
+        }
+
+
+    }
+
+
+    /*
+    private Result createVoucherOrder(Long voucherId){
+        //一人一单
+        Long userId=UserHolder.getUser().getId();
         synchronized (userId.toString().intern()){
             int count = this.query().eq("user_id", userId).eq("voucher_id", voucherId).count();
             if (count > 0){
@@ -85,4 +133,5 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
 
     }
+    */
 }
