@@ -10,6 +10,9 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWork;
 import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
+import org.redisson.Redisson;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +35,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private RedisIdWork redisIdWork;
     @Resource
-    private StringRedisTemplate stringRedisTemplate;
+    private RedissonClient redissonClient;
 
     /**
      * 实现秒杀下单优惠卷
@@ -64,9 +67,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //一人一单
         Long userId=UserHolder.getUser().getId();
         //创建锁对象
-        SimpleRedisLock redisLock=new SimpleRedisLock(stringRedisTemplate, "order:"+userId+":"+voucherId);
+        RLock redisLock = redissonClient.getLock("order:" + userId + ":" + voucherId);
         //尝试获取锁
-        boolean isLock = redisLock.tryLock(1200);
+        boolean isLock = redisLock.tryLock();
         //判断是否获取锁成功
         if (!isLock){
             //获取锁失败，则返回错误信息
