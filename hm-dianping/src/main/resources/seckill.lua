@@ -1,8 +1,10 @@
 -- 1.参数列表
 -- 1.1优惠券id
 local voucherId = ARGV[1]
--- 1.2。用户id
+-- 1.2用户id
 local userId = ARGV[2]
+-- 1.3订单id
+local orderId = ARGV[3]
 
 -- 2.数据key
 -- 2.1 库存key
@@ -25,4 +27,6 @@ end
 redis.call('incrby',-1)
 -- 3.5 下单（保存用户到Redis中的set里）
 redis.call('sadd',orderKey,userId)
+--3.6发送消息到队列中  XADD stream.order * k1 v1 k2 v2 ...
+redis.call('xadd','stream.orders','*','userId',userId,'voucherId',voucherId,'id',orderId)
 return 0
