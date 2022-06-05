@@ -121,6 +121,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             ids.add(Long.valueOf(shopIdStr));
             //4.3获取距离
             Distance distance = result.getDistance();
+            distanceMap.put(shopIdStr,distance);
         });
         //5.根据id查询shop
         String idStr = StrUtil.join(",", ids);
